@@ -9,7 +9,6 @@
   (setv file (open path "r+b")
         rom (list (.read file)))
   (.close file)
-  (print "ROM file loaded" :file stderr)
   (return rom))
 
 (defn write-rom [data path]
@@ -18,8 +17,7 @@
   """
   (setv file (open path "w+b"))
   (.write file (bytes data))
-  (.close file)
-  (print "ROM written to disk" :file stderr))
+  (.close file))
 
 (defn load-ips [path]
   """
@@ -28,11 +26,9 @@
   """
   (setv file (open path "r+b")
         patches [])
-  (if (= (.read file 5) b"PATCH")
-    (print "Valid header found" :file stderr)
-    (do
-      (print "Valid IPS header not found, quitting" :file stderr)
-      (quit 1)))
+  (if (!= (.read file 5) b"PATCH")
+    (do (print "Valid IPS header not found, quitting" :file stderr)
+        (quit 1)))
   (while True
     (.append patches [])
     (. patches [-1] (append (.from-bytes int (.read file 3) "big"))) ;; Read the offset
@@ -53,7 +49,6 @@
 
 (defn apply-patches [rom patches]
   (for [patch patches]
-    (print f"Patch: {patch}" :file stderr)
     (if (= (get patch 1) 0)
       (setv (get rom (slice (get patch 0) (+ (get patch 0) (get patch 2))))
             (lfor byte (range (get patch 2)) (get patch 3)))
@@ -63,8 +58,8 @@
 
 (defn main []
   (if (not-in (len argv) [3 4])
-    (do (print "Please specify a ROM file, an IPS file, and optionally the output file")
-        (print f"{(get argv 0)} <path/to/rom> <path/to/ips> [<path/to/output>]")
+    (do (print "Please specify a ROM file, an IPS file, and optionally the output file" :file stderr)
+        (print f"{(get argv 0)} <path/to/rom> <path/to/ips> [<path/to/output>]" :file stderr)
         (quit 1)))
   (write-rom
     (apply-patches
