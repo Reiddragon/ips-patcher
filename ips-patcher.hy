@@ -1,15 +1,17 @@
 #!/usr/bin/env hy
 (import sys [argv stderr])
 
+(defn EMPTY-RECORD {"offset" None
+                    "size" None
+                    "RLE" False ;; Default assumption is that all records are not RLE
+                    "data" None})
+
 (defn load-rom [path]
   """
   Read the ROM file contents and return them as an array of ints (the numeric
   values of its bytes)
   """
-  (setv file (open path "r+b")
-        rom (list (.read file)))
-  (.close file)
-  (return rom))
+  (return (list (.read (open path "r+b")))))
 
 (defn write-rom [data path]
   """
@@ -22,38 +24,57 @@
 (defn load-ips [path]
   """
   Loads an IPS file, parses it, then returns a list with all the IPS records
-  parsed
+  parsed as dictionaries in the format of `EMPTY-RECORD`
   """
   (setv file (open path "r+b")
         patches [])
+
+  ;; Check if there's a valid header, quit if there isn't
   (if (!= (.read file 5) b"PATCH")
     (do (print "Valid IPS header not found, quitting" :file stderr)
         (quit 1)))
+
   (while True
-    (.append patches [])
-    (. patches [-1] (append (.from-bytes int (.read file 3) "big"))) ;; Read the offset
-    ;; check if it reached the EOF footer, and if yes clean up and finish
-    ;; parsing
-    (if (= (get patches -1 0) 4542278)
+    (.append patches (.copy EMPTY-RECORD))
+    ;; Read the offset
+    (setv (get patches -1 "offset") (.from-bytes int (.read file 3) "big"))
+
+    ;; Check if the EOF marker was reached and quit if so
+    (if (= (get patches -1 "offset") 4542278)
       (do
         (.pop patches)
         (break)))
-    (. patches [-1] (append (.from-bytes int (.read file 2) "big"))) ;; read the size
-    (if (!= (get patches -1 1) 0)                        ;; check if the size is 0
-      (. patches [-1] (append (list (.read file (get patches -1 1))))) ;; if the size is >0 then assume normal patch encoding
-      (do                                        ;; otherwise assume RLE encoding and read the RLE size
-          (. patches [-1] (append (.from-bytes int (.read file 2) "big")))
-          (. patches [-1] (append (.from-bytes int (.read file 1) "big"))))))
+
+    ;; read the size
+    (setv (get patches -1 "size") (.from-bytes int (.read file 2) "big"))
+    (if (= (get patches -1 "size") 0)
+      ;; a size of 0 signals an RLE encoded record which has to be handled
+      ;; differently, which means reading an RLE size then a single data byte
+      (do
+        (setv (get patches -1 "RLE") True
+              (get patches -1 "size") (.from-bytes int (.read file 2) "big")
+              (get patches -1 "data") (.from-bytes int (.read file 1) "big")))
+      ;; and if the regular size is non-0 that's a regular record, meaning you
+      ;; just read `size` number of bytes
+      (setv (get patches -1 "data") (list (.read file (get patches -1 "size"))))))
+
   (.close file)
   (return patches))
 
 (defn apply-patches [rom patches]
+  """
+  Apply the list of patches to the given ROM
+  """
   (for [patch patches]
-    (if (= (get patch 1) 0)
-      (setv (get rom (slice (get patch 0) (+ (get patch 0) (get patch 2))))
-            (lfor byte (range (get patch 2)) (get patch 3)))
-      (setv (get rom (slice (get patch 0) (+ (get patch 0) (get patch 1))))
-            (get patch 2))))
+    ;; Regular and RLE-encoded records need to be applied differently.
+    ;; - With a regular record you just overrite the data starting at offset
+    ;;   until you reach Offset + Size (as that's where the data ends).
+    ;; - With an RLE record, you set all bytes from Offset to Offset + Size
+    ;;   to the data byte
+    (setv (get rom (slice (get patch "offset") (+ (get patch "offset") (get patch "size"))))
+          (if (get patch "RLE")
+            (lfor byte (range (get patch "size")) (get patch "data"))
+            (get patch "data"))))
   (return rom))
 
 (defn main []
