@@ -1,6 +1,9 @@
 # ips-patcher.hy
 A simple [IPS](https://zerosoft.zophar.net/ips.php) patcher written in Hy
 
+## Dependencies
+The patcher relies on Python 3.10 or higher, and [Hy](https://github.com/hylang/hy)
+
 ## Usage
 Simply run the patcher from the command line, providing it with a ROM file to
 patch and an IPS file containing the patches. Optionally you can provide the
