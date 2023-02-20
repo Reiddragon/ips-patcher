@@ -1,7 +1,7 @@
 #!/usr/bin/env hy
 (import sys [argv stderr])
 
-(defn EMPTY-RECORD {"offset" None
+(setv EMPTY-RECORD {"offset" None
                     "size" None
                     "RLE" False ;; Default assumption is that all records are not RLE
                     "data" None})
@@ -11,15 +11,15 @@
   Read the ROM file contents and return them as an array of ints (the numeric
   values of its bytes)
   """
-  (return (list (.read (open path "r+b")))))
+  (with [rom (open path "r+b")]
+    (return (list (.read rom)))))
 
 (defn write-rom [data path]
   """
   Take the ROM data in the format dumped by `load-rom` then write it to a file
   """
-  (setv file (open path "w+b"))
-  (.write file (bytes data))
-  (.close file))
+  (with [file (open path "w+b")]
+    (.write file (bytes data))))
 
 (defn load-ips [path]
   """
@@ -30,9 +30,9 @@
         patches [])
 
   ;; Check if there's a valid header, quit if there isn't
-  (if (!= (.read file 5) b"PATCH")
-    (do (print "Valid IPS header not found, quitting" :file stderr)
-        (quit 1)))
+  (when (!= (.read file 5) b"PATCH")
+    (print "Valid IPS header not found, quitting" :file stderr)
+    (quit 1))
 
   (while True
     (.append patches (.copy EMPTY-RECORD))
@@ -40,10 +40,9 @@
     (setv (get patches -1 "offset") (.from-bytes int (.read file 3) "big"))
 
     ;; Check if the EOF marker was reached and quit if so
-    (if (= (get patches -1 "offset") 4542278)
-      (do
-        (.pop patches)
-        (break)))
+    (when (= (get patches -1 "offset") 4542278)
+      (.pop patches)
+      (break))
 
     ;; read the size
     (setv (get patches -1 "size") (.from-bytes int (.read file 2) "big"))
@@ -78,14 +77,16 @@
   (return rom))
 
 (defn main []
-  (if (not-in (len argv) [3 4])
-    (do (print "Please specify a ROM file, an IPS file, and optionally the output file" :file stderr)
-        (print f"{(get argv 0)} <path/to/rom> <path/to/ips> [<path/to/output>]" :file stderr)
-        (quit 1)))
+  (when (not-in (len argv) [3 4])
+    (print "Please specify a ROM file, an IPS file, and optionally the output file" :file stderr)
+    (print f"{(get argv 0)} <path/to/rom> <path/to/ips> [<path/to/output>]" :file stderr)
+    (quit 1))
+
   (write-rom
     (apply-patches
       (load-rom (get argv 1))
       (load-ips (get argv 2)))
+
     (if (= (len argv) 4)
       (get argv 3)
       (+ (get argv 1 (slice (.rfind (get argv 1) ".")))
@@ -93,5 +94,5 @@
          (get argv 2 (slice (.rfind (get argv 2) ".")))
          (get argv 1 (slice (.rfind (get argv 1) ".") None))))))
 
-(if (= __name__ "__main__")
+(when (= __name__ "__main__")
   (main))
