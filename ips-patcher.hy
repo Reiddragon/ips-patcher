@@ -1,10 +1,10 @@
 #!/usr/bin/env hy
 (import sys [argv stderr])
 
-(setv EMPTY-RECORD {"offset" None
-                    "size" None
-                    "RLE" False ;; Default assumption is that all records are not RLE
-                    "data" None})
+(setv RECORD {"offset" None
+              "size" None
+              "RLE" False ;; Default assumption is that all records are not RLE
+              "data" None})
 
 (defn load-rom [path]
   """
@@ -24,7 +24,7 @@
 (defn load-ips [path]
   """
   Loads an IPS file, parses it, then returns a list with all the IPS records
-  parsed as dictionaries in the format of `EMPTY-RECORD`
+  parsed as dictionaries in the format of `RECORD`
   """
   (setv file (open path "r+b")
         patches [])
@@ -35,7 +35,7 @@
     (quit 1))
 
   (while True
-    (.append patches (.copy EMPTY-RECORD))
+    (.append patches (.copy RECORD))
     ;; Read the offset
     (setv (get patches -1 "offset") (.from-bytes int (.read file 3) "big"))
 
@@ -49,10 +49,9 @@
     (if (= (get patches -1 "size") 0)
       ;; a size of 0 signals an RLE encoded record which has to be handled
       ;; differently, which means reading an RLE size then a single data byte
-      (do
-        (setv (get patches -1 "RLE") True
-              (get patches -1 "size") (.from-bytes int (.read file 2) "big")
-              (get patches -1 "data") (.from-bytes int (.read file 1) "big")))
+      (setv (get patches -1 "RLE") True
+            (get patches -1 "size") (.from-bytes int (.read file 2) "big")
+            (get patches -1 "data") (.from-bytes int (.read file 1) "big"))
       ;; and if the regular size is non-0 that's a regular record, meaning you
       ;; just read `size` number of bytes
       (setv (get patches -1 "data") (list (.read file (get patches -1 "size"))))))
